@@ -10,7 +10,6 @@ type Barangay = {
 };
 
 export default function SignupForm({ barangays }: { barangays: Barangay[] }) {
-  const supabase = createClient();
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,14 +32,13 @@ export default function SignupForm({ barangays }: { barangays: Barangay[] }) {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { error } = await createClient().auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
           barangay_slug: barangaySlug,
-          role: 'citizen',
         },
       },
     });

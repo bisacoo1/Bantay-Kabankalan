@@ -80,11 +80,24 @@ create table if not exists public.permits (
   barangay_slug text not null references public.barangays(slug),
   business_name text not null,
   permit_type text not null,
+  owner_name text,
+  address text,
+  contact_number text,
+  email text,
+  description text,
   status public.permit_status not null default 'pending',
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Existing installations need the new application fields too.
+alter table public.permits
+  add column if not exists owner_name text,
+  add column if not exists address text,
+  add column if not exists contact_number text,
+  add column if not exists email text,
+  add column if not exists description text;
 
 create table if not exists public.announcements (
   id uuid primary key default gen_random_uuid(),
@@ -104,13 +117,13 @@ end;
 $$;
 
 create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (id, full_name, role, barangay_slug)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', 'New User'),
-    coalesce((new.raw_user_meta_data->>'role')::public.user_role, 'citizen'),
+    coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'), ''), 'New User'),
+    'citizen'::public.user_role,
     new.raw_user_meta_data->>'barangay_slug'
   );
   return new;
@@ -161,22 +174,30 @@ drop policy if exists "public read barangays" on public.barangays;
 create policy "public read barangays" on public.barangays
 for select using (true);
 
+revoke update on public.barangays from anon, authenticated;
+grant update (address, contact_phone, contact_email, officials) on public.barangays to authenticated;
+
+drop policy if exists "staff update barangays" on public.barangays;
+create policy "staff update barangays" on public.barangays
+for update to authenticated using (public.is_staff(slug))
+with check (public.is_staff(slug));
+
 drop policy if exists "public read announcements" on public.announcements;
 create policy "public read announcements" on public.announcements
 for select using (true);
 
 drop policy if exists "read own profile" on public.profiles;
 create policy "read own profile" on public.profiles
-for select using (
-  auth.uid() = id
-  or exists (
-    select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'
-  )
-);
+for select to authenticated using (auth.uid() = id);
+
+-- Updating a profile must never let a resident grant themselves a staff role
+-- or change their barangay. Only the display name can be self-edited.
+revoke update on public.profiles from anon, authenticated;
+grant update (full_name) on public.profiles to authenticated;
 
 drop policy if exists "update own profile" on public.profiles;
 create policy "update own profile" on public.profiles
-for update using (auth.uid() = id)
+for update to authenticated using (auth.uid() = id)
 with check (auth.uid() = id);
 
 drop policy if exists "read own tickets or staff tickets" on public.tickets;
@@ -223,11 +244,22 @@ for select using (
 
 drop policy if exists "create own permits" on public.permits;
 create policy "create own permits" on public.permits
-for insert with check (auth.uid() = requester_id);
+for insert to authenticated with check (
+  auth.uid() = requester_id
+  and status = 'pending'
+  and barangay_slug = (
+    select p.barangay_slug from public.profiles p where p.id = auth.uid()
+  )
+);
+
+-- Staff can change status and write a response, but cannot rewrite an
+-- applicant's identity, business details, or barangay.
+revoke update on public.permits from anon, authenticated;
+grant update (status, notes) on public.permits to authenticated;
 
 drop policy if exists "staff update permits" on public.permits;
 create policy "staff update permits" on public.permits
-for update using (public.is_staff(barangay_slug))
+for update to authenticated using (public.is_staff(barangay_slug))
 with check (public.is_staff(barangay_slug));
 
 insert into storage.buckets (id, name, public)

@@ -70,7 +70,7 @@ export default async function StaffPage({
       .limit(20),
     supabase
       .from('permits')
-      .select('id,reference_no,business_name,permit_type,status,notes,created_at')
+      .select('id,reference_no,business_name,permit_type,owner_name,address,contact_number,email,description,status,notes,created_at')
       .eq('barangay_slug', selectedSlug)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -219,6 +219,13 @@ export default async function StaffPage({
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium capitalize">
                         {permit.status}
                       </span>
+                    </div>
+
+                    <div className="mt-3 space-y-1 text-sm text-slate-600">
+                      <p>Applicant: {permit.owner_name || 'Not provided'}</p>
+                      <p>Address: {permit.address || 'Not provided'}</p>
+                      <p>Contact: {permit.contact_number || 'Not provided'}{permit.email ? ` · ${permit.email}` : ''}</p>
+                      {permit.description && <p>Application details: {permit.description}</p>}
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">

@@ -16,11 +16,12 @@ type TrackedPermit = {
 type Props = {
   initialRef: string;
   trackedPermit: TrackedPermit | null;
+  lookupError: boolean;
 };
 
 type Tab = 'track' | 'add';
 
-export default function PermitPageClient({ initialRef, trackedPermit }: Props) {
+export default function PermitPageClient({ initialRef, trackedPermit, lookupError }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('track');
 
   return (
@@ -61,7 +62,7 @@ export default function PermitPageClient({ initialRef, trackedPermit }: Props) {
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm text-slate-300 backdrop-blur">
             🔍 <span className="font-semibold text-white">Track Permit</span> — Enter your reference number below to check the status of your permit application.
           </div>
-          <PermitTracker initialRef={initialRef} permit={trackedPermit} />
+          <PermitTracker initialRef={initialRef} permit={trackedPermit} lookupError={lookupError} />
         </div>
       )}
 
