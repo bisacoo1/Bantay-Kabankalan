@@ -1,15 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
-  const supabase = createClient();
-  const searchParams = useSearchParams();
-  const registered = searchParams.get('registered');
+function RegisteredNotice() {
+  const registered = useSearchParams().has('registered');
+  if (!registered) return null;
 
+  return (
+    <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+      Account created successfully. Please sign in.
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +28,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await createClient().auth.signInWithPassword({
       email,
       password,
     });
@@ -31,7 +39,8 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = '/dashboard';
+    router.replace('/dashboard');
+    router.refresh();
   }
 
   return (
@@ -74,11 +83,9 @@ export default function LoginPage() {
             <h2 className="text-2xl font-bold text-slate-900">Login</h2>
             <p className="mt-2 text-sm text-slate-600">Use your email and password to continue.</p>
 
-            {registered && (
-              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-                Account created successfully. Please sign in.
-              </div>
-            )}
+            <Suspense fallback={null}>
+              <RegisteredNotice />
+            </Suspense>
 
             <form onSubmit={onSubmit} className="mt-6 space-y-4">
               <div>

@@ -1,12 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import PermitTracker from '@/components/PermitTracker';
-import AddPermitForm from '@/components/AddPermitForm';
 import PermitPageClient from './PermitPageClient';
 
 type SearchParams = {
-  ref?: string;
-  created?: string;
+  ref?: string | string[];
 };
 
 type TrackedPermit = {
@@ -21,11 +18,11 @@ type TrackedPermit = {
 export default async function PermitsPage({
   searchParams,
 }: {
-  searchParams?: Promise<SearchParams> | SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
   const supabase = await createClient();
-  const params: SearchParams = await Promise.resolve(searchParams ?? {});
-  const ref = params.ref?.trim() || '';
+  const params = await searchParams;
+  const ref = typeof params.ref === 'string' ? params.ref.trim() : '';
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -37,11 +34,19 @@ export default async function PermitsPage({
     .maybeSingle();
 
   let trackedPermit: TrackedPermit | null = null;
+  let lookupError = false;
 
   if (ref) {
-    const { data, error } = await supabase.rpc('track_permit_by_reference', { ref });
+    const { data, error } = await supabase
+      .from('permits')
+      .select('reference_no,business_name,permit_type,status,notes,created_at')
+      .eq('reference_no', ref)
+      .eq('requester_id', user.id)
+      .maybeSingle();
+
     if (error) console.error('Permit lookup error:', error);
-    trackedPermit = (data?.[0] ?? null) as TrackedPermit | null;
+    lookupError = !!error;
+    trackedPermit = error ? null : data;
   }
 
   return (
@@ -71,18 +76,7 @@ export default async function PermitsPage({
           </div>
         </div>
 
-        {/* Success Banner */}
-        {params.created && (
-          <div className="mt-6 rounded-3xl border border-green-200 bg-green-50 p-5 text-green-800">
-            <p className="font-semibold">✅ Permit request submitted successfully.</p>
-            <p className="mt-1 text-sm">
-              Reference No: <span className="font-bold font-mono">{params.created}</span>
-            </p>
-          </div>
-        )}
-
-        {/* Tab UI (Client Component) */}
-        <PermitPageClient initialRef={ref} trackedPermit={trackedPermit} />
+        <PermitPageClient key={ref} initialRef={ref} trackedPermit={trackedPermit} lookupError={lookupError} />
 
       </div>
     </main>

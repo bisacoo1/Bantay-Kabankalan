@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
+import { createPermitRequest } from '@/app/actions';
 
-type FormData = {
+type PermitFormValues = {
   business_name: string;
   owner_name: string;
   permit_type: string;
@@ -12,7 +14,7 @@ type FormData = {
   description: string;
 };
 
-const INITIAL_FORM: FormData = {
+const INITIAL_FORM: PermitFormValues = {
   business_name: '',
   owner_name: '',
   permit_type: '',
@@ -23,11 +25,11 @@ const INITIAL_FORM: FormData = {
 };
 
 export default function AddPermitForm() {
-  const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  const [form, setForm] = useState<PermitFormValues>(INITIAL_FORM);
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [submitted, setSubmitted] = useState(false);
   const [generatedRef, setGeneratedRef] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -43,30 +45,35 @@ export default function AddPermitForm() {
     if (step > 1) setStep((s) => (s - 1) as 1 | 2 | 3);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
+    setError('');
     setLoading(true);
 
-    // Replace this with your actual Supabase insert logic
-    // const supabase = createClient();
-    // const { data, error } = await supabase.from('permits').insert({ ...form });
+    // Inputs from earlier steps are unmounted on the review step. Submit the
+    // full state rather than relying on the currently rendered form controls.
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(form)) formData.set(key, value);
 
-    setTimeout(() => {
-      const ref = `BK-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`;
+    try {
+      const ref = await createPermitRequest(formData);
       setGeneratedRef(ref);
-      setSubmitted(true);
+    } catch {
+      setError('Unable to submit your permit request. Please try again.');
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   const handleReset = () => {
     setForm(INITIAL_FORM);
     setStep(1);
-    setSubmitted(false);
     setGeneratedRef('');
+    setError('');
   };
 
-  if (submitted) {
+  if (generatedRef) {
     return (
       <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-8 text-center shadow-md">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl">
@@ -84,6 +91,12 @@ export default function AddPermitForm() {
           Please save your reference number to track your permit status.
         </p>
         <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+          <Link
+            href={`/permits?ref=${encodeURIComponent(generatedRef)}`}
+            className="rounded-xl bg-green-700 px-5 py-2.5 font-semibold text-white hover:bg-green-800 transition"
+          >
+            Track this permit
+          </Link>
           <button
             onClick={handleReset}
             className="rounded-xl border border-green-400 bg-white px-5 py-2.5 font-semibold text-green-800 hover:bg-green-50 transition"
@@ -138,6 +151,11 @@ export default function AddPermitForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </div>
+        )}
 
         {/* STEP 1: Permit Type Textbox */}
         {step === 1 && (
@@ -279,7 +297,8 @@ export default function AddPermitForm() {
                 type="button"
                 onClick={handleNext}
                 disabled={
-                  !form.business_name || !form.owner_name || !form.address || !form.contact_number
+                  !form.business_name.trim() || !form.owner_name.trim() ||
+                  !form.address.trim() || !form.contact_number.trim()
                 }
                 className="rounded-xl bg-blue-700 px-6 py-2.5 font-semibold text-white hover:bg-blue-800 transition hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >

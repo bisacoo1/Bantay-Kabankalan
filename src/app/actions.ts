@@ -1,8 +1,10 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { parsePermitRequest } from '@/lib/permits';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -90,31 +92,26 @@ export async function createPermitRequest(formData: FormData) {
 
   const profile = await getProfileOrThrow(supabase, user.id);
 
-  const businessName = String(formData.get('business_name') || '').trim();
-  const permitType = String(formData.get('permit_type') || '').trim();
-  const notes = String(formData.get('notes') || '').trim();
+  if (!profile.barangay_slug) throw new Error('Please select a barangay before applying.');
 
-  if (!businessName || !permitType) {
-    throw new Error('Please fill out the required fields.');
-  }
-
+  const application = parsePermitRequest(formData);
   const ref =
     `BK-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-` +
-    Math.random().toString(36).slice(2, 6).toUpperCase();
+    randomBytes(8).toString('hex').toUpperCase();
 
   const { error } = await supabase.from('permits').insert({
+    ...application,
     reference_no: ref,
     requester_id: user.id,
     barangay_slug: profile.barangay_slug,
-    business_name: businessName,
-    permit_type: permitType,
-    notes: notes || null,
   });
 
   if (error) throw error;
 
   revalidatePath('/permits');
-  redirect(`/permits?created=${ref}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/staff');
+  return ref;
 }
 
 export async function updateTicketStatus(ticketId: string, status: string, note?: string) {
